@@ -1,0 +1,101 @@
+server {
+    listen 80;
+    server_name njcam.com www.njcam.com;
+    
+   # Redirection HTTP vers HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+ }
+
+server {
+    listen 443 ssl;
+    
+    server_name njcam.com www.njcam.com;
+
+    ssl_certificate /etc/ssl/localcerts/localhost.crt;
+    ssl_certificate_key /etc/ssl/localcerts/localhost.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers 'EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH';
+    ssl_prefer_server_ciphers on;
+     
+    #Activation de la mise en cache des sessions SSL
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    #Amélioration de la sécurité des échanges SSL avec dhparam
+    ssl_dhparam /etc/ssl/certs/dhparam.pem;
+
+  #  server_name njcam.com www.njcam.com;
+  #  ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+  #  ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+  #  ssl_protocols TLSv1.2 TLSv1.3;
+  #  ssl_ciphers 'EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH';
+  # ssl_prefer_server_ciphers on;
+  #  ssl_dhparam /etc/ssl/certs/dhparam.pem;
+
+    # Sécurisation des en-têtes HTTP
+    add_header X-Content-Type-Options "nosniff";
+    add_header X-Frame-Options "DENY";
+    add_header X-XSS-Protection "1; mode=block";
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload";
+    
+    
+    # Consolidation: Politique de sécurité du contenu (CSP) en une seule directive
+    add_header Content-Security-Policy "
+    default-src 'self';
+    img-src 'self' https://your-image-source.com https://fastly.picsum.photos https://via.placeholder.com data:;
+    style-src 'self' https://fonts.googleapis.com 'unsafe-inline';
+    style-src-elem 'self' https://fonts.googleapis.com 'unsafe-inline';
+    font-src 'self' https://fonts.gstatic.com data:;
+    connect-src 'self' http://localhost:8088;
+    ";
+    root /var/www/NJCAM/njcam/dist;
+       index index.html;
+
+# Redirection des toute les requêtes vers Apache
+       location / {
+    try_files $uri /index.html;
+    proxy_pass http://127.0.0.1:8080;  # Ou le port de votre backend Node.js
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+    # Rediriger les requêtes vers Node.js (API ou autres routes spécifiques)
+    location /api/ {
+        proxy_pass http://127.0.0.1:8088;  # Node.js backend
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+# Rediriger les requêtes phpMyAdmin vers Apache    
+    location /phpmyadmin {
+        alias /usr/share/phpmyadmin;
+        proxy_pass http://127.0.0.1:8080/phpmyadmin;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+ }
+
+    # Pour mediaboss
+    location /mediaboss {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+     
+    # Traiter les fichiers PHP
+    location ~ \.php$ {
+    include snippets/fastcgi-php.conf;
+    fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    include fastcgi_params;
+    }
+}
